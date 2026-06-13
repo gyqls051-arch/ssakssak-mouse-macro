@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오프컷 마우스 매크로 (Offcut Mouse Macro)</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars-bg"></div>
+    <div class="container">
+        <!-- Main Card -->
+        <main class="app-card">
+            
+            <!-- Header Section -->
+            <header class="app-header">
+                <div class="logo-area">
+                    <span class="logo-dot"></span>
+                    <h1 id="main-title">OFFCUT <span>MACRO</span></h1>
+                </div>
+                <!-- Status Badge -->
+                <div class="status-panel">
+                    <span class="status-label">STATUS</span>
+                    <div id="status-badge" class="badge idle">
+                        <span class="badge-dot"></span>
+                        <span id="status-text">대기 중 (IDLE)</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Coordinate Panel (X, Y) -->
+            <section class="coord-section card-inner">
+                <div class="coordinate-header">
+                    <h2><span class="icon">📍</span> 마우스 좌표 설정</h2>
+                    <span class="hotkey-hint">F8 키로 고정</span>
+                </div>
+                
+                <div class="coordinate-layout">
+                    <!-- Real-time position tracking -->
+                    <div class="coord-box live">
+                        <span class="coord-title">현재 커서 위치</span>
+                        <div class="coord-vals">
+                            <div>X: <span id="live-x">0</span></div>
+                            <div>Y: <span id="live-y">0</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Target / Locked Position -->
+                    <div class="coord-box locked">
+                        <span class="coord-title">클릭 대상 위치</span>
+                        <div class="coord-vals" id="locked-coord-display">
+                            <div>X: <span id="lock-x">-</span></div>
+                            <div>Y: <span id="lock-y">-</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="coord-controls">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="use-locked-coords">
+                        <span class="slider"></span>
+                        <span class="toggle-label">고정 좌표에 클릭하기 (체크 안하면 현재 위치에 클릭)</span>
+                    </label>
+                </div>
+            </section>
+
+            <!-- Mode Selector Tabs -->
+            <nav class="mode-tabs">
+                <button class="tab-btn active" data-tab="countdown">카운트다운</button>
+                <button class="tab-btn" data-tab="scheduled">시간 지정</button>
+                <button class="tab-btn" data-tab="interval">반복 클릭</button>
+            </nav>
+
+            <!-- Configurations Content -->
+            <section class="config-content card-inner">
+                
+                <!-- 1. Countdown Mode Panel -->
+                <div class="tab-pane active" id="pane-countdown">
+                    <div class="countdown-layout">
+                        <!-- Left: Circular Visual Gauge -->
+                        <div class="gauge-column">
+                            <div class="progress-ring-container">
+                                <svg class="progress-ring" width="130" height="130">
+                                    <circle class="progress-ring__circle-bg" stroke="#1d1e2e" stroke-width="8" fill="transparent" r="54" cx="65" cy="65" />
+                                    <circle class="progress-ring__circle" id="progress-ring-circle" stroke="url(#gradient)" stroke-width="8" fill="transparent" r="54" cx="65" cy="65" />
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#a855f7" />
+                                            <stop offset="100%" stop-color="#ec4899" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div class="countdown-timer-display" id="time-display">00:00.0</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right: Numerical Controls -->
+                        <div class="inputs-column">
+                            <h3>딜레이 시간 설정</h3>
+                            <div class="delay-inputs">
+                                <div class="number-input-group">
+                                    <input type="number" id="delay-h" min="0" max="99" value="0">
+                                    <label>시간</label>
+                                </div>
+                                <div class="number-input-group">
+                                    <input type="number" id="delay-m" min="0" max="59" value="0">
+                                    <label>분</label>
+                                </div>
+                                <div class="number-input-group">
+                                    <input type="number" id="delay-s" min="0" max="59" value="5">
+                                    <label>초</label>
+                                </div>
+                            </div>
+                            <div class="slider-container">
+                                <input type="range" id="delay-slider" min="1" max="120" value="5">
+                                <span class="slider-value">간편 조절: <strong id="slider-val-display">5초</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Scheduled Absolute Time Mode Panel -->
+                <div class="tab-pane" id="pane-scheduled">
+                    <h3>클릭할 목표 시각 설정</h3>
+                    <p class="pane-description">정해진 서버 시간/로컬 시간에 정밀하게 1회 클릭을 예약합니다. (티켓팅 및 수강신청에 유용)</p>
+                    
+                    <div class="datetime-grid">
+                        <div class="datetime-picker-wrapper">
+                            <label for="schedule-date">예약 일자 및 시각</label>
+                            <input type="datetime-local" id="schedule-date">
+                        </div>
+                        
+                        <div class="ms-input-wrapper">
+                            <label for="schedule-ms">밀리초 설정 (ms)</label>
+                            <div class="ms-input-box">
+                                <input type="number" id="schedule-ms" min="0" max="999" value="0" placeholder="0">
+                                <span class="unit">ms</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="realtime-clock-box">
+                        <span>현재 로컬 시각:</span>
+                        <strong id="live-clock">2026-05-26 00:00:00.000</strong>
+                    </div>
+                </div>
+
+                <!-- 3. Interval Clicker Mode Panel -->
+                <div class="tab-pane" id="pane-interval">
+                    <h3>클릭 반복 주기 및 횟수</h3>
+                    <p class="pane-description">종료하거나 지정 횟수에 다다를 때까지 반복해서 계속 클릭합니다.</p>
+                    
+                    <div class="interval-options">
+                        <div class="option-row">
+                            <label for="click-interval">클릭 간격 (주기)</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="click-interval" min="1" value="100">
+                                <select id="interval-unit">
+                                    <option value="ms">밀리초 (ms)</option>
+                                    <option value="s">초 (s)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="option-row">
+                            <label>클릭 횟수</label>
+                            <div class="limit-selector">
+                                <label class="radio-label">
+                                    <input type="radio" name="click-limit-type" id="limit-infinite" checked>
+                                    <span>무한 반복</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="click-limit-type" id="limit-number">
+                                    <span>지정 횟수</span>
+                                </label>
+                                <input type="number" id="click-count" min="1" value="10" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- Global Action Parameter Settings -->
+            <section class="click-settings card-inner">
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label for="click-type-select">마우스 클릭 종류</label>
+                        <select id="click-type-select">
+                            <option value="left" selected>마우스 왼쪽 클릭 (Single Left)</option>
+                            <option value="right">마우스 오른쪽 클릭 (Single Right)</option>
+                            <option value="double">마우스 왼쪽 더블 클릭 (Double Left)</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Run & Stop Action Buttons -->
+            <footer class="app-actions">
+                <button id="btn-start" class="btn primary">
+                    <span class="btn-ripple"></span>
+                    <span class="btn-icon">⚡</span>
+                    <span class="btn-text">매크로 예약 / 시작 <kbd>F9</kbd></span>
+                </button>
+                <button id="btn-stop" class="btn secondary">
+                    <span class="btn-ripple"></span>
+                    <span class="btn-icon">🛑</span>
+                    <span class="btn-text">긴급 정지 <kbd>F10</kbd></span>
+                </button>
+            </footer>
+
+            <!-- Live Operations Console Log -->
+            <section class="console-section card-inner">
+                <div class="console-header">
+                    <span>📟 작업 실시간 로그 (Console Output)</span>
+                    <button id="btn-clear-log" class="text-btn">로그 비우기</button>
+                </div>
+                <div id="console-log" class="console-log">
+                    <div class="log-line system">[SYSTEM] 오프컷 마우스 매크로가 성공적으로 연결되었습니다.</div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Hotkeys floating helper sheet -->
+    <div class="hotkey-sheet">
+        <h3>📌 단축키 가이드</h3>
+        <ul>
+            <li><kbd>F8</kbd> 현재 커서 위치로 좌표 고정</li>
+            <li><kbd>F9</kbd> 매크로 대기 / 실행 시작</li>
+            <li><kbd>F10</kbd> 매크로 일시정지 / 긴급 중단</li>
+        </ul>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
