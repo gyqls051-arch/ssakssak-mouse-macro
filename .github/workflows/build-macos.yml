@@ -1,0 +1,57 @@
+# macOS .app 자동 패키징
+# 실행 방법:
+#  - GitHub 리포 > Actions 탭 > "Build macOS app" > Run workflow 버튼
+#  - 또는 v* 태그를 푸시하면 자동 실행
+# 결과물: Actions 실행 페이지 하단 Artifacts에서 zip 다운로드
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest      # Apple Silicon (M1 이후)
+            arch: apple-silicon
+          - runner: macos-15-intel    # Intel Mac (2020년 이전)
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build .app
+        run: |
+          pyinstaller --noconfirm --onefile --windowed \
+            --name "OffcutMouseMacro" \
+            --osx-bundle-identifier "dev.offcut.mousemacro" \
+            --add-data "fonts:fonts" \
+            app.py
+
+      - name: Ad-hoc codesign
+        run: codesign --force --deep -s - "dist/OffcutMouseMacro.app"
+
+      # upload-artifact는 심볼릭 링크/실행 권한을 깨뜨리므로
+      # 먼저 ditto로 zip을 만들어 번들 구조를 보존한다.
+      - name: Zip .app bundle
+        run: |
+          cd dist
+          ditto -c -k --keepParent OffcutMouseMacro.app "OffcutMouseMacro-macOS-${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OffcutMouseMacro-macOS-${{ matrix.arch }}
+          path: dist/OffcutMouseMacro-macOS-${{ matrix.arch }}.zip

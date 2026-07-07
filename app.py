@@ -1,16 +1,26 @@
 """
 오프컷 마우스 매크로 (Offcut Mouse Macro)
-Native PySide6 Desktop Application
+Native PySide6 Desktop Application — Windows / macOS
 
 UI: Offcut 디자인 시스템 (라이트 카드-온-그레이, 플랫, Pretendard, 프레시 그린 #03C75A).
+
+macOS 참고: pynput 전역 단축키/마우스 제어는 시스템 설정 > 개인정보 보호 및 보안에서
+'손쉬운 사용'과 '입력 모니터링' 권한을 앱(또는 터미널/Python)에 허용해야 동작한다.
 """
 import sys
 import os
 import time
-import ctypes
 import logging
 import threading
+import subprocess
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
+
+IS_WINDOWS = sys.platform.startswith("win")
+IS_MACOS = sys.platform == "darwin"
+
+if IS_WINDOWS:
+    import ctypes
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -48,24 +58,55 @@ INFO            = "#2f6feb"
 INFO_SOFT       = "#eff6ff"
 DISABLED_BG     = "#d6dbe4"
 
-FONT_SANS = "'Pretendard', 'Malgun Gothic', 'Segoe UI', sans-serif"
-FONT_MONO = "'Consolas', 'D2Coding', monospace"
+# 플랫폼별 폴백 폰트 (Pretendard 번들 로드 실패 시)
+if IS_MACOS:
+    FALLBACK_SANS = "Apple SD Gothic Neo"
+    MONO_FAMILY = "Menlo"
+else:
+    FALLBACK_SANS = "Malgun Gothic"
+    MONO_FAMILY = "Consolas"
+
+FONT_SANS = f"'Pretendard', '{FALLBACK_SANS}', 'Segoe UI', sans-serif"
+FONT_MONO = f"'{MONO_FAMILY}', 'D2Coding', monospace"
 
 
-# ─── Windows Sleep Prevention ───
+# ─── Safety limits (폭주 클릭 방지) ───
+# 반복 클릭 간격의 합리적 하한. 1ms는 사실상 시스템을 마비시킬 수 있어 막는다.
+MIN_INTERVAL_MS = 10
+# 무한 반복 모드에서도 적용되는 안전 상한. 둘 중 하나라도 도달하면 자동 정지한다.
+MAX_RUNTIME_SECONDS = 60 * 60        # 최대 실행 시간 (1시간)
+MAX_TOTAL_CLICKS = 1_000_000         # 최대 총 클릭 횟수
+
+
+# ─── Sleep Prevention (Windows: SetThreadExecutionState / macOS: caffeinate) ───
 ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
 ES_DISPLAY_REQUIRED = 0x00000002
 
+# macOS: caffeinate 자식 프로세스가 살아있는 동안 절전이 막힌다.
+_caffeinate_proc = None
+
 def prevent_sleep():
-    """Windows가 절전 모드로 들어가지 않도록 방지"""
-    ctypes.windll.kernel32.SetThreadExecutionState(
-        ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
-    )
+    """OS가 절전 모드로 들어가지 않도록 방지"""
+    global _caffeinate_proc
+    if IS_WINDOWS:
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+        )
+    elif IS_MACOS:
+        if _caffeinate_proc is None or _caffeinate_proc.poll() is not None:
+            # -d 디스플레이, -i 유휴, -m 디스크, -s 시스템(AC 전원) 절전 방지
+            _caffeinate_proc = subprocess.Popen(["/usr/bin/caffeinate", "-dims"])
 
 def allow_sleep():
     """절전 방지 해제"""
-    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+    global _caffeinate_proc
+    if IS_WINDOWS:
+        ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+    elif IS_MACOS:
+        if _caffeinate_proc is not None:
+            _caffeinate_proc.terminate()
+            _caffeinate_proc = None
 
 
 # ─── Resource / Font loading ───
@@ -86,16 +127,40 @@ def load_app_fonts():
 
 
 # ─── File Logging ───
+def _log_dir():
+    """사용자별 앱데이터 폴더를 우선 사용.
+    Windows: %LOCALAPPDATA%\\OffcutMouseMacro / macOS: ~/Library/Logs/OffcutMouseMacro.
+    실패하면 EXE/스크립트 옆으로 폴백한다."""
+    if IS_MACOS:
+        d = os.path.expanduser('~/Library/Logs/OffcutMouseMacro')
+    else:
+        base = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
+        if base:
+            d = os.path.join(base, 'OffcutMouseMacro')
+        else:
+            d = os.path.dirname(os.path.abspath(sys.argv[0]))
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        d = os.path.dirname(os.path.abspath(sys.argv[0]))
+    return d
+
+
 def setup_logging():
-    log_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    log_dir = _log_dir()
     log_path = os.path.join(log_dir, 'macro_log.txt')
-    logging.basicConfig(
-        filename=log_path,
-        level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        encoding='utf-8'
+    handler = RotatingFileHandler(
+        log_path, maxBytes=512 * 1024, backupCount=3, encoding='utf-8'
     )
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
+    ))
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    # 중복 핸들러 방지 (재호출 대비)
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    root.addHandler(handler)
     logging.info('=== 오프컷 마우스 매크로 시작 ===')
     return log_path
 
@@ -109,6 +174,7 @@ class SignalBridge(QObject):
     click_done_signal = Signal(str)        # info
     interval_count_signal = Signal(int, int)  # done, max
     reset_ring_signal = Signal()           # ask GUI thread to clear the ring
+    release_sleep_signal = Signal()        # ask GUI thread to release sleep prevention
 
 
 # ─── Pill Toggle (keeps the QCheckBox API: isChecked / setChecked / toggled) ───
@@ -197,7 +263,7 @@ class CountdownRing(QWidget):
 
         # Center text
         painter.setPen(QColor(TEXT))
-        font = QFont("Consolas", 13, QFont.Bold)
+        font = QFont(MONO_FAMILY, 13, QFont.Bold)
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignCenter, self.remaining_text)
         painter.end()
@@ -553,7 +619,11 @@ class MacroWindow(QMainWindow):
         # --- Interval ---
         tab3 = QWidget()
         t3 = QVBoxLayout(tab3); t3.setContentsMargins(2, 12, 2, 2); t3.setSpacing(14)
-        desc3 = QLabel("멈추거나 지정한 횟수에 도달할 때까지 계속 클릭해요.")
+        desc3 = QLabel(
+            f"멈추거나 지정한 횟수에 도달할 때까지 계속 클릭해요. "
+            f"(안전을 위해 간격 최소 {MIN_INTERVAL_MS}ms, "
+            f"무한 모드도 {MAX_RUNTIME_SECONDS // 60}분 또는 {MAX_TOTAL_CLICKS:,}회에서 자동 정지)"
+        )
         desc3.setObjectName("paneDesc"); desc3.setWordWrap(True)
         t3.addWidget(desc3)
 
@@ -640,6 +710,11 @@ class MacroWindow(QMainWindow):
         lg.addWidget(self.log_box)
         layout.addWidget(log_card)
         self._append_log("오프컷 마우스 매크로를 불러왔어요.", "system")
+        if IS_MACOS:
+            self._append_log(
+                "[macOS] 단축키와 클릭이 동작하려면 시스템 설정 > 개인정보 보호 및 보안에서 "
+                "'손쉬운 사용'과 '입력 모니터링' 권한을 이 앱에 허용해 주세요.", "warning"
+            )
 
         # ===== Hotkey guide =====
         keys_card, kc = self._card()
@@ -650,6 +725,12 @@ class MacroWindow(QMainWindow):
                           ("F9", "매크로 예약 · 실행"),
                           ("F10", "매크로 정지")):
             kc.addLayout(self._key_row(key, desc))
+        if IS_MACOS:
+            mac_hint = QLabel("macOS에서는 Fn 키와 함께 누르거나, 시스템 설정 > 키보드에서 "
+                              "'F1, F2 등의 키를 표준 기능 키로 사용'을 켜 주세요.")
+            mac_hint.setObjectName("hint")
+            mac_hint.setWordWrap(True)
+            kc.addWidget(mac_hint)
         layout.addWidget(keys_card)
         layout.addStretch()
 
@@ -684,6 +765,7 @@ class MacroWindow(QMainWindow):
         self.bridge.coord_locked_signal.connect(self._on_coord_locked)
         self.bridge.countdown_tick.connect(self._on_tick)
         self.bridge.reset_ring_signal.connect(self.countdown_ring.reset)
+        self.bridge.release_sleep_signal.connect(self._release_sleep)
         self.bridge.click_done_signal.connect(lambda s: self._append_log(s, "success"))
         self.bridge.interval_count_signal.connect(
             lambda d, m: self._append_log(f"[반복] 클릭 {d} / {'무한' if m == -1 else m}", "normal")
@@ -894,6 +976,12 @@ class MacroWindow(QMainWindow):
             val = self.interval_val.value()
             unit_idx = self.interval_unit.currentIndex()
             interval_ms = val if unit_idx == 0 else val * 1000
+            # 폭주 방지: 간격 하한을 강제한다.
+            if interval_ms < MIN_INTERVAL_MS:
+                self.bridge.log_signal.emit(
+                    f"[알림] 클릭 간격이 너무 짧아 최소 {MIN_INTERVAL_MS}ms로 조정했어요.", "warning"
+                )
+                interval_ms = MIN_INTERVAL_MS
             max_clicks = -1 if self.radio_infinite.isChecked() else self.click_count.value()
             self.macro_thread = threading.Thread(
                 target=self._worker_interval, args=(interval_ms, max_clicks, click_type_str, tx, ty), daemon=True
@@ -951,7 +1039,8 @@ class MacroWindow(QMainWindow):
             logging.error(f'카운트다운 에러: {e}', exc_info=True)
             self.bridge.log_signal.emit(f"[ERROR] {e}", "error")
         finally:
-            self._release_sleep()
+            # SetThreadExecutionState는 호출 스레드 기준이므로 GUI 스레드에서 해제 요청.
+            self.bridge.release_sleep_signal.emit()
 
     def _worker_scheduled(self, target_ts, click_type, tx, ty):
         try:
@@ -984,7 +1073,8 @@ class MacroWindow(QMainWindow):
             logging.error(f'예약 클릭 에러: {e}', exc_info=True)
             self.bridge.log_signal.emit(f"[ERROR] {e}", "error")
         finally:
-            self._release_sleep()
+            # SetThreadExecutionState는 호출 스레드 기준이므로 GUI 스레드에서 해제 요청.
+            self.bridge.release_sleep_signal.emit()
 
     def _worker_interval(self, interval_ms, max_clicks, click_type, tx, ty):
         try:
@@ -992,11 +1082,29 @@ class MacroWindow(QMainWindow):
             logging.info(f'반복 클릭 시작: 간격={interval_ms}ms, 횟수={"무한" if max_clicks == -1 else max_clicks}')
             self.bridge.status_signal.emit(f"반복 클릭 중 (매 {interval_ms}ms)")
             clicks = 0
+            run_start = time.time()
 
             while max_clicks == -1 or clicks < max_clicks:
                 if self.macro_stop.is_set():
                     logging.info(f'반복 클릭 사용자 중단 ({clicks}회 완료)')
                     return
+
+                # ── 폭주 방지 안전 상한 ── 무한 모드에서도 강제 정지한다.
+                if clicks >= MAX_TOTAL_CLICKS:
+                    logging.warning(f'반복 클릭 안전 상한 도달: {clicks}회')
+                    self.bridge.status_signal.emit("완료")
+                    self.bridge.log_signal.emit(
+                        f"[완료] 안전 상한({MAX_TOTAL_CLICKS}회)에 도달해 자동 정지했어요.", "warning"
+                    )
+                    return
+                if time.time() - run_start >= MAX_RUNTIME_SECONDS:
+                    logging.warning(f'반복 클릭 최대 실행시간 도달: {clicks}회')
+                    self.bridge.status_signal.emit("완료")
+                    self.bridge.log_signal.emit(
+                        f"[완료] 최대 실행시간({MAX_RUNTIME_SECONDS // 60}분)에 도달해 자동 정지했어요.", "warning"
+                    )
+                    return
+
                 self._perform_click(click_type, tx, ty)
                 clicks += 1
                 self.bridge.interval_count_signal.emit(clicks, max_clicks)
@@ -1014,7 +1122,8 @@ class MacroWindow(QMainWindow):
             logging.error(f'반복 클릭 에러: {e}', exc_info=True)
             self.bridge.log_signal.emit(f"[ERROR] {e}", "error")
         finally:
-            self._release_sleep()
+            # SetThreadExecutionState는 호출 스레드 기준이므로 GUI 스레드에서 해제 요청.
+            self.bridge.release_sleep_signal.emit()
 
     def closeEvent(self, event):
         self.macro_stop.set()
@@ -1033,7 +1142,7 @@ def main():
         app.setStyle("Fusion")
 
         # Pretendard (번들). 실패 시 시스템 한글 폰트로 폴백.
-        sans = "Pretendard" if load_app_fonts() else "Malgun Gothic"
+        sans = "Pretendard" if load_app_fonts() else FALLBACK_SANS
         app.setFont(QFont(sans, 10))
 
         # Light palette (Offcut)
@@ -1052,7 +1161,8 @@ def main():
 
         window = MacroWindow()
         window.show()
-        logging.info(f'로그 파일 위치: {log_path}')
+        # 전체 절대경로(민감정보)는 기록하지 않고 파일명만 남긴다.
+        logging.info(f'로그 파일: {os.path.basename(log_path)}')
         sys.exit(app.exec())
     except Exception as e:
         logging.critical(f'치명적 에러: {e}', exc_info=True)
