@@ -36,22 +36,22 @@ jobs:
       - name: Build .app
         run: |
           pyinstaller --noconfirm --onefile --windowed \
-            --name "OffcutMouseMacro" \
-            --osx-bundle-identifier "dev.offcut.mousemacro" \
+            --name "SsakSsakMacro" \
+            --osx-bundle-identifier "com.ssakkimchi.macro" \
             --add-data "fonts:fonts" \
             app.py
 
       - name: Ad-hoc codesign
-        run: codesign --force --deep -s - "dist/OffcutMouseMacro.app"
+        run: codesign --force --deep -s - "dist/SsakSsakMacro.app"
 
       # upload-artifact는 심볼릭 링크/실행 권한을 깨뜨리므로
       # 먼저 ditto로 zip을 만들어 번들 구조를 보존한다.
       - name: Zip .app bundle
         run: |
           cd dist
-          ditto -c -k --keepParent OffcutMouseMacro.app "OffcutMouseMacro-macOS-${{ matrix.arch }}.zip"
+          ditto -c -k --keepParent SsakSsakMacro.app "SsakSsakMacro-macOS-${{ matrix.arch }}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OffcutMouseMacro-macOS-${{ matrix.arch }}
-          path: dist/OffcutMouseMacro-macOS-${{ matrix.arch }}.zip
+          name: SsakSsakMacro-macOS-${{ matrix.arch }}
+          path: dist/SsakSsakMacro-macOS-${{ matrix.arch }}.zip

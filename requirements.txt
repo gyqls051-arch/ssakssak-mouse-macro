@@ -1,4 +1,4 @@
-# 오프컷 마우스 매크로 의존성
+# 싹싹김치 매크로 의존성
 # 설치: pip install -r requirements.txt
 # Windows / macOS 지원 (절전 방지: SetThreadExecutionState / caffeinate)
 

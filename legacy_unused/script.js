@@ -1,5 +1,5 @@
 /* ----------------------------------------------------
-   OFFCUT MOUSE MACRO - FRONTEND CONTROLLER (script.js)
+   SSAKSSAK MOUSE MACRO - FRONTEND CONTROLLER (script.js)
    ---------------------------------------------------- */
 
 // Global State

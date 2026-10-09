@@ -1,8 +1,8 @@
 """
-오프컷 마우스 매크로 (Offcut Mouse Macro)
+싹싹김치 매크로 (SsakSsak Macro)
 Native PySide6 Desktop Application — Windows / macOS
 
-UI: Offcut 디자인 시스템 (라이트 카드-온-그레이, 플랫, Pretendard, 프레시 그린 #03C75A).
+UI: 싹싹김치 디자인 시스템 (라이트 카드-온-그레이, 플랫, Pretendard, 김치 주황 #E85D2C).
 
 macOS 참고: pynput 전역 단축키/마우스 제어는 시스템 설정 > 개인정보 보호 및 보안에서
 '손쉬운 사용'과 '입력 모니터링' 권한을 앱(또는 터미널/Python)에 허용해야 동작한다.
@@ -13,6 +13,7 @@ import time
 import logging
 import threading
 import subprocess
+import webbrowser
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
@@ -26,7 +27,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QSpinBox, QComboBox, QTabWidget,
     QRadioButton, QCheckBox, QTextEdit, QDateTimeEdit,
-    QFrame, QSlider, QScrollArea, QSizePolicy
+    QFrame, QSlider, QScrollArea, QSizePolicy, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject, QDateTime, QSize, QRectF
 from PySide6.QtGui import QFont, QFontDatabase, QColor, QPalette, QPainter, QPen
@@ -35,11 +36,11 @@ from pynput import keyboard
 from pynput.mouse import Button, Controller as MouseController
 
 
-# ─── Offcut Design System — tokens ───
-ACCENT          = "#03c75a"   # 프레시 그린 (primary)
-ACCENT_HOVER    = "#02b651"
-ACCENT_PRESSED  = "#029848"
-ACCENT_SOFT     = "#e6f9ee"
+# ─── SsakSsak Design System — tokens ───
+ACCENT          = "#e85d2c"   # 김치 주황 (primary)
+ACCENT_HOVER    = "#d9521f"
+ACCENT_PRESSED  = "#c2481b"
+ACCENT_SOFT     = "#fdeee5"
 BG              = "#f4f5f7"    # 페이지 배경
 BG_2            = "#fafbfc"    # inset surfaces
 CARD            = "#ffffff"
@@ -57,6 +58,14 @@ WARNING         = "#d97706"
 INFO            = "#2f6feb"
 INFO_SOFT       = "#eff6ff"
 DISABLED_BG     = "#d6dbe4"
+
+# ─── 버전 / 자동 업데이트 ───
+# 배포 시 APP_VERSION 과 릴리스 태그를 맞출 것 (CI 가 tag==APP_VERSION 검증).
+APP_VERSION = "1.0.0"
+# 이 앱의 공개 저장소 루트에 둔 version.json. CI 가 태그 릴리스 때 자동 갱신한다.
+VERSION_INFO_URL = "https://raw.githubusercontent.com/gyqls051-arch/ssakssak-mouse-macro/main/version.json"
+
+from ssak_update import check_for_update
 
 # 플랫폼별 폴백 폰트 (Pretendard 번들 로드 실패 시)
 if IS_MACOS:
@@ -129,14 +138,14 @@ def load_app_fonts():
 # ─── File Logging ───
 def _log_dir():
     """사용자별 앱데이터 폴더를 우선 사용.
-    Windows: %LOCALAPPDATA%\\OffcutMouseMacro / macOS: ~/Library/Logs/OffcutMouseMacro.
+    Windows: %LOCALAPPDATA%\\SsakSsakMacro / macOS: ~/Library/Logs/SsakSsakMacro.
     실패하면 EXE/스크립트 옆으로 폴백한다."""
     if IS_MACOS:
-        d = os.path.expanduser('~/Library/Logs/OffcutMouseMacro')
+        d = os.path.expanduser('~/Library/Logs/SsakSsakMacro')
     else:
         base = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
         if base:
-            d = os.path.join(base, 'OffcutMouseMacro')
+            d = os.path.join(base, 'SsakSsakMacro')
         else:
             d = os.path.dirname(os.path.abspath(sys.argv[0]))
     try:
@@ -161,7 +170,7 @@ def setup_logging():
     for h in list(root.handlers):
         root.removeHandler(h)
     root.addHandler(handler)
-    logging.info('=== 오프컷 마우스 매크로 시작 ===')
+    logging.info('=== 싹싹김치 매크로 시작 ===')
     return log_path
 
 
@@ -175,6 +184,7 @@ class SignalBridge(QObject):
     interval_count_signal = Signal(int, int)  # done, max
     reset_ring_signal = Signal()           # ask GUI thread to clear the ring
     release_sleep_signal = Signal()        # ask GUI thread to release sleep prevention
+    update_signal = Signal(dict)           # ssak_update 결과 → GUI 스레드로 marshal
 
 
 # ─── Pill Toggle (keeps the QCheckBox API: isChecked / setChecked / toggled) ───
@@ -273,7 +283,7 @@ class CountdownRing(QWidget):
 class MacroWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("오프컷 마우스 매크로")
+        self.setWindowTitle("싹싹김치 매크로")
         self.setMinimumSize(540, 640)
         self.resize(600, 900)
 
@@ -292,7 +302,7 @@ class MacroWindow(QMainWindow):
         self._start_live_cursor_timer()
         logging.info('GUI 초기화 완료')
 
-    # ─── Offcut light theme ───
+    # ─── SsakSsak light theme ───
     def _setup_style(self):
         self.setStyleSheet(f"""
             QMainWindow {{ background: {BG}; }}
@@ -504,8 +514,8 @@ class MacroWindow(QMainWindow):
         bl.setContentsMargins(24, 22, 24, 18)
         bl.setSpacing(12)
 
-        mark = QLabel(f'<span style="color:#f4f5f7;">OFF</span>'
-                      f'<span style="color:{ACCENT};">CUT</span>')
+        mark = QLabel(f'<span style="color:#f4f5f7;">싹싹</span>'
+                      f'<span style="color:{ACCENT};">김치</span>')
         mark_font = QFont()
         mark_font.setFamily("Pretendard")
         mark_font.setPointSize(28)
@@ -597,7 +607,7 @@ class MacroWindow(QMainWindow):
         # --- Scheduled ---
         tab2 = QWidget()
         t2 = QVBoxLayout(tab2); t2.setContentsMargins(2, 12, 2, 2); t2.setSpacing(12)
-        desc2 = QLabel("정해둔 시각에 정확히 한 번 클릭해요. 티켓팅이나 수강신청에 좋아요.")
+        desc2 = QLabel("정해둔 시각에 정확히 한 번 클릭해요. 정시에 열리는 신청·등록 페이지에 좋아요.")
         desc2.setObjectName("paneDesc"); desc2.setWordWrap(True)
         t2.addWidget(desc2)
         dt_row = QHBoxLayout(); dt_row.setSpacing(12)
@@ -709,7 +719,9 @@ class MacroWindow(QMainWindow):
         self.log_box.document().setMaximumBlockCount(500)
         lg.addWidget(self.log_box)
         layout.addWidget(log_card)
-        self._append_log("오프컷 마우스 매크로를 불러왔어요.", "system")
+        self._append_log("싹싹김치 매크로를 불러왔어요.", "system")
+        check_for_update(APP_VERSION, VERSION_INFO_URL,
+                         lambda d: self.bridge.update_signal.emit(d))
         if IS_MACOS:
             self._append_log(
                 "[macOS] 단축키와 클릭이 동작하려면 시스템 설정 > 개인정보 보호 및 보안에서 "
@@ -770,6 +782,7 @@ class MacroWindow(QMainWindow):
         self.bridge.interval_count_signal.connect(
             lambda d, m: self._append_log(f"[반복] 클릭 {d} / {'무한' if m == -1 else m}", "normal")
         )
+        self.bridge.update_signal.connect(self._on_update_result)
 
     # ─── Delay slider <-> spinbox sync ───
     def _on_slider(self, v):
@@ -837,6 +850,33 @@ class MacroWindow(QMainWindow):
             f'<span style="color:{SUBTLE};">[{ts}]</span> '
             f'<span style="color:{c};">{msg}</span>'
         )
+
+    # ─── Update check (백그라운드 → update_signal → 여기 GUI 스레드) ───
+    def _on_update_result(self, d):
+        kind = d.get("kind")
+        url = d.get("download_url") or "https://www.ssakkimchi.com"
+        if kind == "new_version":
+            self._append_log(f"[업데이트] {d.get('message')} — {url}", "system")
+            if d.get("release_notes"):
+                self._append_log(f"[업데이트] {d['release_notes']}", "normal")
+            self._show_update_prompt(d, url)
+        elif kind == "force_update":
+            self._append_log(f"[업데이트] {d.get('message')}", "error")
+            self._show_update_prompt(d, url, force=True)
+        elif kind == "killswitch":
+            self._append_log(f"[중요] {d.get('message')}", "error")
+            self._show_update_prompt(d, url, force=True)
+
+    def _show_update_prompt(self, d, url, force=False):
+        title = "업데이트 안내" if not force else "업데이트 필요"
+        body = d.get("message", "")
+        if d.get("release_notes"):
+            body += f"\n\n{d['release_notes']}"
+        body += "\n\n다운로드 페이지를 열까요?"
+        ret = QMessageBox.question(self, title, body,
+                                   QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if ret == QMessageBox.Yes:
+            webbrowser.open(url)
 
     # ─── Live Cursor Timer ───
     def _start_live_cursor_timer(self):
@@ -1145,7 +1185,7 @@ def main():
         sans = "Pretendard" if load_app_fonts() else FALLBACK_SANS
         app.setFont(QFont(sans, 10))
 
-        # Light palette (Offcut)
+        # Light palette (SsakSsak)
         palette = QPalette()
         palette.setColor(QPalette.Window, QColor(BG))
         palette.setColor(QPalette.WindowText, QColor(TEXT))
