@@ -29,8 +29,8 @@ from PySide6.QtWidgets import (
     QRadioButton, QCheckBox, QTextEdit, QDateTimeEdit,
     QFrame, QSlider, QScrollArea, QSizePolicy, QMessageBox
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QDateTime, QSize, QRectF
-from PySide6.QtGui import QFont, QFontDatabase, QColor, QPalette, QPainter, QPen
+from PySide6.QtCore import Qt, QTimer, Signal, QObject, QDateTime, QSize, QRectF, QUrl
+from PySide6.QtGui import QFont, QFontDatabase, QColor, QPalette, QPainter, QPen, QDesktopServices
 
 from pynput import keyboard
 from pynput.mouse import Button, Controller as MouseController
@@ -61,7 +61,7 @@ DISABLED_BG     = "#d6dbe4"
 
 # ─── 버전 / 자동 업데이트 ───
 # 배포 시 APP_VERSION 과 릴리스 태그를 맞출 것 (CI 가 tag==APP_VERSION 검증).
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 # 이 앱의 공개 저장소 루트에 둔 version.json. CI 가 태그 릴리스 때 자동 갱신한다.
 VERSION_INFO_URL = "https://raw.githubusercontent.com/gyqls051-arch/ssakssak-mouse-macro/main/version.json"
 
@@ -744,6 +744,48 @@ class MacroWindow(QMainWindow):
             mac_hint.setWordWrap(True)
             kc.addWidget(mac_hint)
         layout.addWidget(keys_card)
+
+        # ===== Sister-product promo bar (OFFCUT STUDIO) =====
+        ad = QFrame()
+        ad.setCursor(Qt.PointingHandCursor)
+        ad.setStyleSheet(
+            "QFrame{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #1b2230,stop:.58 #28324c,stop:1 #3a4470);"
+            "border-radius:12px;}"
+        )
+        al = QHBoxLayout(ad)
+        al.setContentsMargins(14, 11, 14, 11)
+        al.setSpacing(11)
+        badge = QLabel("O")
+        badge.setFixedSize(34, 34)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setStyleSheet(
+            "background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ff8a4c,stop:1 #ff5a2e);"
+            "color:#fff;border-radius:9px;font-size:17px;font-weight:900;"
+        )
+        al.addWidget(badge)
+        ad_txt = QVBoxLayout()
+        ad_txt.setSpacing(2)
+        ad_t1 = QLabel('OFFCUT STUDIO  <span style="color:#ffb892;font-size:10px;">자매 제품</span>')
+        ad_t1.setTextFormat(Qt.RichText)
+        ad_t1.setStyleSheet("color:#fff;font-size:12.5px;font-weight:800;background:transparent;")
+        ad_t2 = QLabel("긴 영상, 컷만 쏙쏙 뽑는 프리미어 편집 가속기")
+        ad_t2.setStyleSheet("color:#cdd3e2;font-size:11.5px;background:transparent;")
+        ad_txt.addWidget(ad_t1)
+        ad_txt.addWidget(ad_t2)
+        al.addLayout(ad_txt, 1)
+        ad_cta = QLabel("보러가기 →")
+        ad_cta.setStyleSheet(
+            "background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ff8a4c,stop:1 #ff5a2e);"
+            "color:#fff;border-radius:13px;padding:7px 14px;font-size:12px;font-weight:700;"
+        )
+        al.addWidget(ad_cta)
+        ad.mouseReleaseEvent = (
+            lambda e: QDesktopServices.openUrl(
+                QUrl("https://www.offcut.dev/?utm_source=ssakssak_macro&utm_medium=app_banner"))
+        )
+        layout.addWidget(ad)
+
         layout.addStretch()
 
     def _coord_box(self, label, value_html):
