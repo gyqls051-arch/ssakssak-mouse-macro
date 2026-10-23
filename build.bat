@@ -15,7 +15,7 @@ echo Resources (Pretendard fonts) will be embedded inside the EXE.
 echo.
 
 :: Compile with --windowed for clean headless execution
-pyinstaller --noconfirm --onefile --windowed --name="SsakSsakMacro" --add-data "fonts;fonts" app.py
+pyinstaller --noconfirm --onefile --windowed --version-file version_info.txt --name="SsakSsakMacro" --add-data "fonts;fonts" app.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

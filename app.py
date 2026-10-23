@@ -66,6 +66,7 @@ APP_VERSION = "1.0.1"
 VERSION_INFO_URL = "https://raw.githubusercontent.com/gyqls051-arch/ssakssak-mouse-macro/main/version.json"
 
 from ssak_update import check_for_update
+from ssak_installer import Client as UpdateClient, Config as UpdateConfig
 
 # 플랫폼별 폴백 폰트 (Pretendard 번들 로드 실패 시)
 if IS_MACOS:
@@ -720,8 +721,6 @@ class MacroWindow(QMainWindow):
         lg.addWidget(self.log_box)
         layout.addWidget(log_card)
         self._append_log("싹싹김치 매크로를 불러왔어요.", "system")
-        check_for_update(APP_VERSION, VERSION_INFO_URL,
-                         lambda d: self.bridge.update_signal.emit(d))
         if IS_MACOS:
             self._append_log(
                 "[macOS] 단축키와 클릭이 동작하려면 시스템 설정 > 개인정보 보호 및 보안에서 "
@@ -824,7 +823,14 @@ class MacroWindow(QMainWindow):
         self.bridge.interval_count_signal.connect(
             lambda d, m: self._append_log(f"[반복] 클릭 {d} / {'무한' if m == -1 else m}", "normal")
         )
+        self._update_installing = False
+        self._update_client = UpdateClient(
+            UpdateConfig("ssakssak-mouse-macro", "SsakSsakMacro.exe", "portable", "SsakSsak Macro"),
+            APP_VERSION, self.bridge.update_signal.emit)
         self.bridge.update_signal.connect(self._on_update_result)
+        self._update_client.recover()
+        check_for_update(APP_VERSION, VERSION_INFO_URL,
+                         lambda d: self.bridge.update_signal.emit(d))
 
     # ─── Delay slider <-> spinbox sync ───
     def _on_slider(self, v):
@@ -896,29 +902,34 @@ class MacroWindow(QMainWindow):
     # ─── Update check (백그라운드 → update_signal → 여기 GUI 스레드) ───
     def _on_update_result(self, d):
         kind = d.get("kind")
-        url = d.get("download_url") or "https://www.ssakkimchi.com"
-        if kind == "new_version":
-            self._append_log(f"[업데이트] {d.get('message')} — {url}", "system")
-            if d.get("release_notes"):
-                self._append_log(f"[업데이트] {d['release_notes']}", "normal")
-            self._show_update_prompt(d, url)
-        elif kind == "force_update":
-            self._append_log(f"[업데이트] {d.get('message')}", "error")
-            self._show_update_prompt(d, url, force=True)
-        elif kind == "killswitch":
-            self._append_log(f"[중요] {d.get('message')}", "error")
-            self._show_update_prompt(d, url, force=True)
-
-    def _show_update_prompt(self, d, url, force=False):
-        title = "업데이트 안내" if not force else "업데이트 필요"
-        body = d.get("message", "")
-        if d.get("release_notes"):
-            body += f"\n\n{d['release_notes']}"
-        body += "\n\n다운로드 페이지를 열까요?"
-        ret = QMessageBox.question(self, title, body,
-                                   QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-        if ret == QMessageBox.Yes:
-            webbrowser.open(url)
+        if kind in ("new_version", "force_update"):
+            self._update_client.begin(d.get("latest", ""))
+        elif kind == "install_ready":
+            if self.macro_thread and self.macro_thread.is_alive():
+                self._update_client.cancel()
+                QMessageBox.information(self, "업데이트 대기", "매크로 실행 중이라 설치를 미뤘습니다. 다음 실행 때 다시 확인합니다.")
+                return
+            answer = QMessageBox.question(self, "업데이트 준비 완료",
+                "새 버전의 서명 검증이 끝났습니다. 지금 앱을 닫고 업데이트할까요?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if answer == QMessageBox.Yes:
+                if self.macro_thread and self.macro_thread.is_alive():
+                    self._update_client.cancel()
+                    return
+                self._update_installing = True
+                self.setEnabled(False)
+                if not self._update_client.install():
+                    self._update_installing = False
+                    self.setEnabled(True)
+            else:
+                self._update_client.cancel()
+        elif kind == "install_started":
+            self.close()
+        elif kind == "install_error":
+            self._update_installing = False
+            self.setEnabled(True)
+            QMessageBox.information(self, "업데이트 보류", d.get("message", "업데이트하지 못했습니다.") +
+                                    "\n현재 앱은 계속 사용할 수 있습니다.")
 
     # ─── Live Cursor Timer ───
     def _start_live_cursor_timer(self):
@@ -1016,6 +1027,8 @@ class MacroWindow(QMainWindow):
 
     # ─── Start Macro ───
     def _on_start(self):
+        if self._update_installing:
+            return
         if self.macro_thread and self.macro_thread.is_alive():
             self._on_stop()
             # 이전 워커가 완전히 끝난 뒤에 플래그를 비워야 중복 클릭 레이스가 안 생겨요.
