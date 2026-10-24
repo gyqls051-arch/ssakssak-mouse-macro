@@ -38,7 +38,7 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed \
             --name "SsakSsakMacro" \
             --osx-bundle-identifier "com.ssakkimchi.macro" \
-            --add-data "fonts:fonts" \
+            --icon "assets/brand/app.icns" --add-data "assets/brand:assets/brand" --add-data "fonts:fonts" \
             app.py
 
       - name: Ad-hoc codesign

@@ -41,7 +41,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build exe
-        run: pyinstaller --noconfirm --onefile --windowed --version-file version_info.txt --name="SsakSsakMacro" --add-data "fonts;fonts" app.py
+        run: pyinstaller --noconfirm --onefile --windowed --version-file version_info.txt --name="SsakSsakMacro" --icon "assets/brand/app.ico" --add-data "assets/brand;assets/brand" --add-data "fonts;fonts" app.py
 
       - name: Sign and verify update executable
         env:

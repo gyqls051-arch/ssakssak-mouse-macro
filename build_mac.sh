@@ -16,7 +16,7 @@ echo "[2/3] 앱 컴파일... (Pretendard 폰트가 앱 안에 포함됩니다)"
 pyinstaller --noconfirm --onefile --windowed \
     --name "SsakSsakMacro" \
     --osx-bundle-identifier "com.ssakkimchi.macro" \
-    --add-data "fonts:fonts" \
+    --icon "assets/brand/app.icns" --add-data "assets/brand:assets/brand" --add-data "fonts:fonts" \
     app.py
 
 echo ""

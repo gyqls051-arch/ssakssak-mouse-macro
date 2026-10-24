@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QFrame, QSlider, QScrollArea, QSizePolicy, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject, QDateTime, QSize, QRectF, QUrl
-from PySide6.QtGui import QFont, QFontDatabase, QColor, QPalette, QPainter, QPen, QDesktopServices
+from PySide6.QtGui import QIcon, QFont, QFontDatabase, QColor, QPalette, QPainter, QPen, QDesktopServices
 
 from pynput import keyboard
 from pynput.mouse import Button, Controller as MouseController
@@ -1234,6 +1234,8 @@ def main():
 
     try:
         app = QApplication(sys.argv)
+        icon_root = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        app.setWindowIcon(QIcon(os.path.join(icon_root, "assets", "brand", "app.png")))
         app.setStyle("Fusion")
 
         # Pretendard (번들). 실패 시 시스템 한글 폰트로 폴백.
